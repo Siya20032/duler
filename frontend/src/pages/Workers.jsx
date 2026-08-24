@@ -4,81 +4,144 @@ import api from "../api";
 function Workers() {
   const [workers, setWorkers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
-  async function loadWorkers() {
+  const loadWorkers = async (isRefresh = false) => {
     try {
-      setLoading(true);
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
       setError("");
+
+      console.log("Fetching workers...");
 
       const response = await api.get("/workers");
 
-      setWorkers(response.data || []);
+      console.log("Workers response:", response.data);
+
+      setWorkers(Array.isArray(response.data) ? response.data : []);
     } catch (err) {
       console.error("Failed to load workers:", err);
 
-      setError(
-        err.response?.data?.detail ||
-          "Failed to load workers"
-      );
+      if (err.response?.status === 401) {
+        setError("Your session has expired. Please login again.");
+      } else {
+        setError(
+          err.response?.data?.detail ||
+            err.response?.data?.message ||
+            "Failed to load workers."
+        );
+      }
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }
+  };
 
   useEffect(() => {
     loadWorkers();
 
-    const interval = setInterval(loadWorkers, 5000);
+    const interval = setInterval(() => {
+      loadWorkers(true);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, []);
 
+  const getWorkerStatusClass = (status) => {
+    if (status === "online") {
+      return "status-badge status-success";
+    }
+
+    if (status === "offline") {
+      return "status-badge status-danger";
+    }
+
+    return "status-badge status-neutral";
+  };
+
   return (
     <div className="page">
-      <div className="page-header">
+
+      {/* PAGE HEADER */}
+      <div className="page-heading">
         <div>
-          <h1>Workers</h1>
+          <h2>Workers</h2>
+
           <p>
-            Monitor workers connected to your job scheduler.
+            Monitor workers connected to your distributed
+            job scheduler.
           </p>
         </div>
 
         <button
-          onClick={loadWorkers}
-          className="btn"
+          type="button"
+          className="primary-button"
+          onClick={() => {
+            console.log("Refresh button clicked");
+            loadWorkers(true);
+          }}
+          disabled={refreshing}
         >
-          Refresh
+          {refreshing ? "Refreshing..." : "↻ Refresh"}
         </button>
       </div>
 
-      {loading && (
-        <div className="card">
-          Loading workers...
-        </div>
-      )}
-
+      {/* ERROR */}
       {error && (
-        <div className="card error">
-          {error}
+        <div className="professional-auth-error">
+          <div className="auth-error-icon">!</div>
+
+          <div>
+            <strong>Unable to load workers</strong>
+
+            <span>{error}</span>
+          </div>
         </div>
       )}
 
-      {!loading && !error && workers.length === 0 && (
-        <div className="card">
-          <h3>No workers found</h3>
+      {/* INITIAL LOADING */}
+      {loading && (
+        <div className="empty-panel">
+          <div className="loading-spinner"></div>
+
+          <h3>Loading workers</h3>
+
           <p>
-            Start a worker to see it here.
+            Checking connected worker instances...
           </p>
         </div>
       )}
 
+      {/* EMPTY */}
+      {!loading && !error && workers.length === 0 && (
+        <div className="empty-panel">
+
+          <div className="empty-icon">
+            ⚙
+          </div>
+
+          <h3>No workers found</h3>
+
+          <p>
+            Start a worker service to see it here.
+          </p>
+        </div>
+      )}
+
+      {/* WORKERS TABLE */}
       {!loading && workers.length > 0 && (
-        <div className="card">
+        <div className="data-panel">
+
           <table className="data-table">
+
             <thead>
               <tr>
-                <th>Name</th>
+                <th>Worker</th>
                 <th>Hostname</th>
                 <th>Status</th>
                 <th>Concurrency</th>
@@ -89,10 +152,21 @@ function Workers() {
             <tbody>
               {workers.map((worker) => (
                 <tr key={worker.id}>
+
                   <td>
                     <strong>
-                      {worker.name}
+                      {worker.name || "Unnamed Worker"}
                     </strong>
+
+                    <div
+                      style={{
+                        marginTop: "4px",
+                        fontSize: "11px",
+                        color: "#9ca3af",
+                      }}
+                    >
+                      ID: {worker.id}
+                    </div>
                   </td>
 
                   <td>
@@ -101,11 +175,9 @@ function Workers() {
 
                   <td>
                     <span
-                      className={
-                        worker.status === "online"
-                          ? "status-badge success"
-                          : "status-badge"
-                      }
+                      className={getWorkerStatusClass(
+                        worker.status
+                      )}
                     >
                       {worker.status || "offline"}
                     </span>
@@ -120,18 +192,18 @@ function Workers() {
                       ? new Date(
                           worker.last_heartbeat_at
                         ).toLocaleString()
-                      : worker.lastHeartbeatAt
-                      ? new Date(
-                          worker.lastHeartbeatAt
-                        ).toLocaleString()
                       : "-"}
                   </td>
+
                 </tr>
               ))}
             </tbody>
+
           </table>
+
         </div>
       )}
+
     </div>
   );
 }
